@@ -1,3 +1,8 @@
 tests/out/
 .DS_Store
 node_modules/
+ios/FX.xcodeproj/
+ios/build/
+ios/Payload/
+ios/FX.ipa
+shots/

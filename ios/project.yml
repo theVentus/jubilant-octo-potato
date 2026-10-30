@@ -1,0 +1,46 @@
+name: FX
+options:
+  bundleIdPrefix: com.theventus
+  deploymentTarget:
+    iOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  FX:
+    type: application
+    platform: iOS
+    sources:
+      - path: FX
+      - path: ../rates.json
+        buildPhase: resources
+    info:
+      path: FX/Info.plist
+      properties:
+        CFBundleDisplayName: FX
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.theventus.fx
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1"
+  FXTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [FXTests]
+    dependencies:
+      - target: FX
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  FX:
+    build:
+      targets:
+        FX: all
+    test:
+      targets: [FXTests]
