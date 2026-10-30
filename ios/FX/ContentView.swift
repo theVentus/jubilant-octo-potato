@@ -154,7 +154,7 @@ struct CurrencyRow: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
         .glassEffect(isActive ? .regular.tint(Color.accentColor.opacity(0.22)).interactive() : .regular.interactive(),
                      in: .rect(cornerRadius: 28))
         .overlay {
@@ -173,7 +173,7 @@ struct FlagBadge: View {
     var body: some View {
         ZStack {
             if let f = Currency.flag(code) {
-                Text(f).font(.system(size: size * 1.35))
+                Text(f).font(.system(size: size * 1.6))
             } else {
                 Circle().fill(.thinMaterial)
                 Text(String(code.prefix(1)))
@@ -227,10 +227,10 @@ struct Keypad: View {
     ]
 
     var body: some View {
-        GlassEffectContainer(spacing: 10) {
-            VStack(spacing: 10) {
+        GlassEffectContainer(spacing: 8) {
+            VStack(spacing: 8) {
                 ForEach(rows.indices, id: \.self) { r in
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         ForEach(rows[r], id: \.self) { k in
                             KeyButton(key: k) { onKey(k) }
                         }
@@ -275,7 +275,7 @@ struct KeyButton: View {
             }
         }
         .font(.system(size: 26, weight: .medium, design: .rounded))
-        .frame(maxWidth: .infinity, minHeight: 50)
+        .frame(maxWidth: .infinity, minHeight: 44)
     }
 
     private static func symbol(_ o: Character) -> String {
@@ -297,19 +297,12 @@ struct CurrencyPicker: View {
 
     var body: some View {
         NavigationStack {
-            List(filtered, id: \.self) { code in
-                Button { toggle(code) } label: {
-                    HStack(spacing: 12) {
-                        FlagBadge(code: code, size: 34)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(Currency.name(code)).foregroundStyle(.primary)
-                            Text(code).font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Image(systemName: selected.contains(code) ? "checkmark.circle.fill" : "circle")
-                            .font(.title3)
-                            .foregroundStyle(selected.contains(code) ? Color.accentColor : Color.secondary.opacity(0.5))
-                    }
+            List {
+                if query.isEmpty && !selected.isEmpty {
+                    Section("Selected") { ForEach(selected, id: \.self) { row($0) } }
+                }
+                Section(query.isEmpty ? "All currencies" : "Results") {
+                    ForEach(filtered, id: \.self) { row($0) }
                 }
             }
             .searchable(text: $query, prompt: "Search currency")
@@ -320,6 +313,23 @@ struct CurrencyPicker: View {
             }
         }
         .presentationDetents([.large])
+    }
+
+    private func row(_ code: String) -> some View {
+        Button { toggle(code) } label: {
+            HStack(spacing: 12) {
+                FlagBadge(code: code, size: 34)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(Currency.name(code))
+                    Text(code).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: selected.contains(code) ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(selected.contains(code) ? Color.accentColor : Color.secondary.opacity(0.5))
+            }
+        }
+        .tint(.primary)
     }
 }
 
