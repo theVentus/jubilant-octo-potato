@@ -331,7 +331,7 @@ struct KeyButton: View {
         Button(action: action) {
             label
                 .font(.system(size: 28, weight: scheme == .dark ? .semibold : .regular, design: .rounded))
-                .shadow(color: .black.opacity(scheme == .dark ? 0.35 : 0), radius: 2)
+                .shadow(color: scheme == .dark ? .black.opacity(0.35) : .white.opacity(0.6), radius: 2)
                 .foregroundStyle(foreground)
                 .frame(maxWidth: .infinity, minHeight: 54)
                 .contentShape(.capsule)
@@ -344,7 +344,7 @@ struct KeyButton: View {
     private var glass: Glass {
         if key == .equals { return .regular.tint(.orange).interactive() }
         // Clear glass shows the guilloche bending through each key; needs bold, bright glyphs.
-        return scheme == .dark ? .clear.interactive() : .regular.interactive()
+        return scheme == .dark ? .clear.interactive() : .clear.tint(.white.opacity(0.35)).interactive()
     }
 
     private var foreground: Color {
@@ -455,23 +455,22 @@ struct Backdrop: View {
                     Text(f)
                         .font(.system(size: 640))
                         .blur(radius: 80)
-                        .opacity(dark ? 0.85 : 0.6)
+                        .opacity(dark ? 0.85 : 0.8)
                         .offset(y: -300)
                     Text(f)
                         .font(.system(size: 640))
                         .scaleEffect(x: -1)
                         .blur(radius: 110)
-                        .opacity(dark ? 0.5 : 0.35)
+                        .opacity(dark ? 0.5 : 0.55)
                         .offset(y: 420)
                 }
                 .saturation(1.35)
                 .id(activeCode)
                 .transition(.opacity)
                 LinearGradient(colors: dark ? [.black.opacity(0.15), .black.opacity(0.45)]
-                                            : [.white.opacity(0.05), .white.opacity(0.35)],
+                                            : [.white.opacity(0.0), .white.opacity(0.2)],
                                startPoint: .top, endPoint: .bottom)
             }
-            Guilloche(ink: dark ? Color.white.opacity(0.22) : Color.black.opacity(0.16))
         }
         .animation(.easeInOut(duration: 0.7), value: activeCode)
         .ignoresSafeArea()
