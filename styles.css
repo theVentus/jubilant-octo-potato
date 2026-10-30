@@ -1,0 +1,85 @@
+/* Liquid-glass baseline. iOS Safari supports backdrop-filter blur/saturate only
+   (no SVG displacement), so refraction is faked with layered highlights. */
+:root {
+  --text: #0b1020;
+  --muted: rgba(11, 16, 32, .55);
+  --glass-bg: rgba(255, 255, 255, .28);
+  --glass-edge: rgba(255, 255, 255, .55);
+  --glass-shade: rgba(0, 0, 0, .08);
+  --accent: #0a84ff;
+  --radius: 22px;
+  --wall-a: #ffd6a5; --wall-b: #a0c4ff; --wall-c: #bdb2ff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #f5f7ff;
+    --muted: rgba(245, 247, 255, .55);
+    --glass-bg: rgba(255, 255, 255, .08);
+    --glass-edge: rgba(255, 255, 255, .22);
+    --glass-shade: rgba(0, 0, 0, .35);
+    --wall-a: #1d2b64; --wall-b: #3a1c71; --wall-c: #0b3d4f;
+  }
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; }
+body {
+  font: 17px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  color: var(--text);
+  background: #0b1020;
+  padding: env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 16px);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+.wallpaper {
+  position: fixed; inset: 0; z-index: -1;
+  background:
+    radial-gradient(60% 50% at 20% 15%, var(--wall-a), transparent 70%),
+    radial-gradient(55% 45% at 85% 40%, var(--wall-b), transparent 70%),
+    radial-gradient(70% 55% at 30% 90%, var(--wall-c), transparent 70%),
+    #6c7a9c;
+}
+
+.glass {
+  position: relative;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border-radius: var(--radius);
+  box-shadow:
+    inset 0 1px 0 var(--glass-edge),
+    inset 0 -1px 0 rgba(255, 255, 255, .08),
+    0 8px 24px var(--glass-shade);
+}
+.glass::before { /* specular rim */
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  padding: 1px;
+  background: linear-gradient(135deg, var(--glass-edge), transparent 40%, transparent 60%, var(--glass-edge));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+}
+
+.topbar {
+  margin-top: 12px; padding: 14px 18px;
+  display: flex; align-items: baseline; justify-content: space-between;
+}
+.topbar h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -.02em; }
+.status { font-size: 13px; color: var(--muted); }
+
+.rows { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; min-height: 64px;
+  transition: transform .2s ease;
+}
+.row.active { box-shadow: inset 0 0 0 1.5px var(--accent), 0 8px 24px var(--glass-shade); }
+.row:active { transform: scale(.985); }
+.code { display: flex; flex-direction: column; min-width: 0; flex: 0 0 auto; }
+.ccy { font-weight: 600; font-size: 19px; }
+.name { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
+.amount {
+  flex: 1; min-width: 0; text-align: right;
+  font: inherit; font-size: 24px; font-weight: 500; font-variant-numeric: tabular-nums;
+  color: var(--text); background: transparent; border: 0; outline: 0;
+}
