@@ -9,6 +9,9 @@ permissions:
 concurrency:
   group: ios
   cancel-in-progress: true
+defaults:
+  run:
+    shell: bash -eo pipefail {0}
 jobs:
   build:
     runs-on: macos-26
@@ -18,28 +21,20 @@ jobs:
 
       - name: Select Xcode 26
         run: |
-          ls -d /Applications/Xcode*.app
           sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
-          xcodebuild -version
+          xcodebuild -version | tee -a ci.log
 
       - name: Generate project
-        run: brew install xcodegen && cd ios && xcodegen generate
+        run: brew install xcodegen && cd ios && xcodegen generate 2>&1 | tee -a ../ci.log
 
       - name: Pick simulator
-        run: |
-          UDID=$(xcrun simctl list devices available -j | python3 -c '
-          import json, sys
-          d = json.load(sys.stdin)["devices"]
-          c = sorted((rt, x) for rt, xs in d.items() if "iOS-26" in rt for x in xs if x["name"].startswith("iPhone"))
-          pick = [x for _, x in c if x["name"] == "iPhone 17 Pro Max"] or [x for _, x in c if "Pro Max" in x["name"]] or [x for _, x in c]
-          print(pick[-1]["udid"]); print(pick[-1]["name"], file=sys.stderr)')
-          echo "UDID=$UDID" >> "$GITHUB_ENV"
+        run: echo "UDID=$(python3 ios/scripts/pick-sim.py 2>>ci.log)" >> "$GITHUB_ENV"
 
       - name: Unit tests
-        run: cd ios && xcodebuild test -project FX.xcodeproj -scheme FX -destination "id=$UDID" -quiet
+        run: cd ios && xcodebuild test -project FX.xcodeproj -scheme FX -destination "id=$UDID" -quiet 2>&1 | tee -a ../ci.log
 
       - name: Screenshots
-        run: bash ios/scripts/screenshots.sh
+        run: bash ios/scripts/screenshots.sh 2>&1 | tee -a ci.log
 
       - name: Publish screenshots to ci-shots branch
         run: |
@@ -54,7 +49,7 @@ jobs:
           cd ios
           xcodebuild -project FX.xcodeproj -scheme FX -configuration Release -sdk iphoneos \
             -destination generic/platform=iOS -derivedDataPath build/device \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build -quiet
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build -quiet 2>&1 | tee -a ../ci.log
           mkdir -p Payload && cp -R build/device/Build/Products/Release-iphoneos/FX.app Payload/
           zip -qr FX.ipa Payload
 
@@ -67,3 +62,11 @@ jobs:
             gh release create latest -R $R --prerelease --title "Latest build" --notes "Unsigned IPA. Install with Sideloadly."
           gh release upload latest ios/FX.ipa -R $R --clobber
           gh release edit latest -R $R --notes "Unsigned IPA from ${GITHUB_SHA::7}. Install with Sideloadly."
+
+      # Raw logs aren't reachable from the dev sandbox; surface failures as annotations instead.
+      - name: Report failure
+        if: failure()
+        run: |
+          touch ci.log
+          grep -E "error:|failed|Error|Traceback|no iOS 26" ci.log | sort -u | head -9 | while IFS= read -r l; do echo "::error::${l:0:900}"; done
+          tail -40 ci.log | sed 's/%/%25/g' | awk 'BEGIN{ORS="%0A"} {print}' | sed 's/^/::warning title=tail::/'; echo
