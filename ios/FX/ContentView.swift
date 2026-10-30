@@ -344,7 +344,7 @@ struct KeyButton: View {
     private var glass: Glass {
         if key == .equals { return .regular.tint(.orange).interactive() }
         // Clear glass shows the guilloche bending through each key; needs bold, bright glyphs.
-        return scheme == .dark ? .clear.interactive() : .clear.tint(.white.opacity(0.35)).interactive()
+        return scheme == .dark ? .clear.interactive() : .clear.tint(.white.opacity(0.12)).interactive()
     }
 
     private var foreground: Color {
