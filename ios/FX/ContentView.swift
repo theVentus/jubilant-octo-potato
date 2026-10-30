@@ -1,79 +1,99 @@
 import SwiftUI
+import UIKit
 
+/// Layering rule (iOS 26): content sits on the backdrop; glass is reserved for the floating
+/// control layer (selection lens, keypad dock, toolbar) so content visibly refracts through it.
 struct ContentView: View {
     @Environment(RatesStore.self) private var store
     @AppStorage("list") private var listRaw = "INR,USD,EUR,AED,GBP"
     @AppStorage("active") private var active = "USD"
     @AppStorage("expr") private var exprRaw = "1"
     @State private var calc = Calc("1")
+    @State private var keypadOpen = true
     @State private var showPicker = false
-    @State private var editMode: EditMode = .inactive
+    @Namespace private var glass
 
     private var list: [String] { listRaw.split(separator: ",").map(String.init).filter { !$0.isEmpty } }
+    /// `-slowmo YES` stretches animations so CI can capture morph frames.
+    private var anim: Animation {
+        .smooth(duration: 0.45 * (UserDefaults.standard.bool(forKey: "slowmo") ? 6 : 1), extraBounce: 0.12)
+    }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                List {
-                    StatusPill(store: store)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 6, trailing: 20))
-
-                    ForEach(list, id: \.self) { code in
-                        CurrencyRow(code: code,
-                                    isActive: code == active,
-                                    amount: amountText(code),
-                                    detail: detailText(code))
-                            .contentShape(.rect(cornerRadius: 28))
-                            .onTapGesture { select(code) }
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
-                            .swipeActions {
-                                Button(role: .destructive) { remove(code) } label: { Label("Remove", systemImage: "trash") }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    StatusLine(store: store)
+                        .padding(.horizontal, 24)
+                    GlassEffectContainer(spacing: 0) {
+                        LazyVStack(spacing: 4) {
+                            ForEach(list, id: \.self) { code in
+                                CurrencyRow(code: code,
+                                            isActive: code == active,
+                                            amount: amountText(code),
+                                            detail: detailText(code),
+                                            ns: glass)
+                                    .contentShape(.rect(cornerRadius: 30))
+                                    .onTapGesture { select(code) }
+                                    .contextMenu {
+                                        Button { UIPasteboard.general.string = amountText(code) } label: {
+                                            Label("Copy amount", systemImage: "doc.on.doc")
+                                        }
+                                        Button(role: .destructive) { remove(code) } label: {
+                                            Label("Remove", systemImage: "trash")
+                                        }
+                                    }
                             }
+                        }
                     }
-                    .onMove { from, to in
-                        var l = list; l.move(fromOffsets: from, toOffset: to); setList(l)
-                    }
+                    .padding(.horizontal, 12)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .environment(\.editMode, $editMode)
-                .refreshable { await store.refresh() }
-
-                Keypad { key in
+            }
+            .scrollIndicators(.hidden)
+            .onScrollPhaseChange { _, phase in
+                if phase == .interacting && keypadOpen { withAnimation(anim) { keypadOpen = false } }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                KeypadDock(open: $keypadOpen,
+                           code: active,
+                           display: amountText(active),
+                           anim: anim,
+                           ns: glass) { key in
                     withAnimation(.snappy(duration: 0.18)) { calc.press(key) }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
-                .padding(.bottom, 4)
             }
+            .refreshable { await store.refresh() }
             .background { Backdrop(activeCode: active) }
             .navigationTitle("Currency")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(editMode.isEditing ? "Done" : "Edit") {
-                        withAnimation { editMode = editMode.isEditing ? .inactive : .active }
-                    }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showPicker = true } label: { Image(systemName: "plus") }
                 }
             }
             .sheet(isPresented: $showPicker) {
-                CurrencyPicker(selected: list, all: store.rates.rates.keys.sorted { Currency.name($0) < Currency.name($1) }) { toggle($0) }
+                CurrencyPicker(selected: list,
+                               all: store.rates.rates.keys.sorted { Currency.name($0) < Currency.name($1) },
+                               toggle: toggle,
+                               move: { from, to in var l = list; l.move(fromOffsets: from, toOffset: to); setList(l) },
+                               delete: { idx in idx.map { list[$0] }.forEach(remove) })
             }
         }
         .onAppear {
             calc = Calc(exprRaw)
-            if UserDefaults.standard.bool(forKey: "showPicker") { showPicker = true }
+            let d = UserDefaults.standard
+            if d.bool(forKey: "showPicker") { showPicker = true }
+            if d.bool(forKey: "startCollapsed") { keypadOpen = false }
+            if let c = d.string(forKey: "demoSelect") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { select(c) }
+            }
+            if d.bool(forKey: "demoCollapse") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { withAnimation(anim) { keypadOpen = false } }
+            }
         }
         .onChange(of: calc.text) { _, t in exprRaw = t }
         .task { await store.refresh() }
         .sensoryFeedback(.selection, trigger: calc.text)
+        .sensoryFeedback(.impact(weight: .light), trigger: active)
     }
 
     private func amountText(_ code: String) -> String {
@@ -88,13 +108,17 @@ struct ContentView: View {
     }
 
     private func select(_ code: String) {
-        guard code != active else { return }
+        guard code != active else {
+            if !keypadOpen { withAnimation(anim) { keypadOpen = true } }
+            return
+        }
         let v = calc.value.flatMap { store.rates.convert($0, from: active, to: code) } ?? 0
-        withAnimation(.snappy) {
+        withAnimation(anim) {
             active = code
             var c = Calc(Calc.plain((v * 100).rounded() / 100))
             c.justEvaluated = true
             calc = c
+            keypadOpen = true
         }
     }
 
@@ -113,17 +137,42 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Pieces
+// MARK: - Content
+
+struct StatusLine: View {
+    let store: RatesStore
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon).symbolEffect(.rotate, isActive: store.isRefreshing)
+            Text(label)
+        }
+        .font(.footnote.weight(.medium))
+        .foregroundStyle(.secondary)
+    }
+
+    private var icon: String {
+        if store.isRefreshing { return "arrow.triangle.2.circlepath" }
+        return store.lastRefreshFailed ? "wifi.slash" : "checkmark.circle"
+    }
+
+    private var label: String {
+        guard let d = store.rates.updated else { return "No rates yet" }
+        let when = d.formatted(.relative(presentation: .named))
+        return store.lastRefreshFailed ? "Offline · rates \(when)" : "Rates updated \(when)"
+    }
+}
 
 struct CurrencyRow: View {
     let code: String
     let isActive: Bool
     let amount: String
     let detail: String?
+    let ns: Namespace.ID
 
     var body: some View {
         HStack(spacing: 14) {
-            FlagBadge(code: code, size: 46)
+            FlagBadge(code: code, size: 44)
             VStack(alignment: .leading, spacing: 2) {
                 Text(code)
                     .font(.system(.title3, design: .rounded, weight: .semibold))
@@ -139,7 +188,7 @@ struct CurrencyRow: View {
                         .font(.system(.body, design: .rounded))
                         .foregroundStyle(.secondary)
                     Text(amount)
-                        .font(.system(size: isActive ? 30 : 26, weight: isActive ? .semibold : .regular, design: .rounded))
+                        .font(.system(size: isActive ? 32 : 26, weight: isActive ? .semibold : .regular, design: .rounded))
                         .monospacedDigit()
                         .contentTransition(.numericText())
                 }
@@ -153,14 +202,14 @@ struct CurrencyRow: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .glassEffect(isActive ? .regular.tint(Color.accentColor.opacity(0.22)).interactive() : .regular.interactive(),
-                     in: .rect(cornerRadius: 28))
-        .overlay {
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .background {
             if isActive {
-                RoundedRectangle(cornerRadius: 28)
-                    .strokeBorder(Color.accentColor.opacity(0.55), lineWidth: 1)
+                // The single glass "lens" — same ID on whichever row is active, so it flows between rows.
+                Color.clear
+                    .glassEffect(.regular.tint(Color.accentColor.opacity(0.14)).interactive(), in: .rect(cornerRadius: 30))
+                    .glassEffectID("lens", in: ns)
             }
         }
     }
@@ -168,7 +217,7 @@ struct CurrencyRow: View {
 
 struct FlagBadge: View {
     let code: String
-    var size: CGFloat = 46
+    var size: CGFloat = 44
 
     var body: some View {
         ZStack {
@@ -182,40 +231,18 @@ struct FlagBadge: View {
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
-        .overlay(Circle().strokeBorder(.white.opacity(0.45), lineWidth: 1))
-        .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
+        .overlay(Circle().strokeBorder(.white.opacity(0.35), lineWidth: 0.5))
     }
 }
 
-struct StatusPill: View {
-    let store: RatesStore
+// MARK: - Glass control layer
 
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .symbolEffect(.rotate, isActive: store.isRefreshing)
-            Text(label)
-        }
-        .font(.footnote.weight(.medium))
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .glassEffect(.regular, in: .capsule)
-    }
-
-    private var icon: String {
-        if store.isRefreshing { return "arrow.triangle.2.circlepath" }
-        return store.lastRefreshFailed ? "wifi.slash" : "checkmark.circle"
-    }
-
-    private var label: String {
-        guard let d = store.rates.updated else { return "No rates yet" }
-        let when = d.formatted(.relative(presentation: .named))
-        return store.lastRefreshFailed ? "Offline · rates \(when)" : "Updated \(when)"
-    }
-}
-
-struct Keypad: View {
+struct KeypadDock: View {
+    @Binding var open: Bool
+    let code: String
+    let display: String
+    let anim: Animation
+    let ns: Namespace.ID
     let onKey: (Key) -> Void
 
     private let rows: [[Key]] = [
@@ -227,55 +254,92 @@ struct Keypad: View {
     ]
 
     var body: some View {
-        GlassEffectContainer(spacing: 8) {
-            VStack(spacing: 8) {
-                ForEach(rows.indices, id: \.self) { r in
-                    HStack(spacing: 8) {
-                        ForEach(rows[r], id: \.self) { k in
-                            KeyButton(key: k) { onKey(k) }
+        GlassEffectContainer(spacing: 16) {
+            if open {
+                VStack(spacing: 8) {
+                    Button { withAnimation(anim) { open = false } } label: {
+                        Image(systemName: "chevron.compact.down")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 64, height: 22)
+                    }
+                    .buttonStyle(.plain)
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .glassEffectID("dock", in: ns)
+
+                    ForEach(rows.indices, id: \.self) { r in
+                        HStack(spacing: 8) {
+                            ForEach(rows[r].indices, id: \.self) { c in
+                                let k = rows[r][c]
+                                KeyButton(key: k, id: "key-\(r)-\(c)", ns: ns) { onKey(k) }
+                            }
                         }
                     }
                 }
+            } else {
+                Button { withAnimation(anim) { open = true } } label: {
+                    HStack(spacing: 10) {
+                        FlagBadge(code: code, size: 28)
+                        Text(display)
+                            .font(.system(.title3, design: .rounded, weight: .semibold))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .contentTransition(.numericText())
+                        Image(systemName: "keyboard.chevron.compact.down")
+                            .rotationEffect(.degrees(180))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.leading, 12)
+                    .padding(.trailing, 18)
+                    .frame(height: 56)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .glassEffectID("dock", in: ns)
             }
         }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 2)
     }
 }
 
 struct KeyButton: View {
     let key: Key
+    let id: String
+    let ns: Namespace.ID
     let action: () -> Void
 
     var body: some View {
-        if key == .equals {
-            Button(action: action) { label }
-                .buttonStyle(.glassProminent)
-                .tint(.orange)
-        } else {
-            Button(action: action) { label.foregroundStyle(foreground) }
-                .buttonStyle(.glass)
+        Button(action: action) {
+            label
+                .font(.system(size: 28, weight: key.isFunction ? .medium : .regular, design: .rounded))
+                .foregroundStyle(foreground)
+                .frame(maxWidth: .infinity, minHeight: 54)
+                .contentShape(.capsule)
         }
+        .buttonStyle(.plain)
+        .glassEffect(key == .equals ? .regular.tint(.orange).interactive() : .regular.interactive(), in: .capsule)
+        .glassEffectID(id, in: ns)
     }
 
     private var foreground: Color {
+        if key == .equals { return .white }
         if key.isOperator { return .orange }
         if key.isFunction { return .secondary }
         return .primary
     }
 
-    private var label: some View {
-        Group {
-            switch key {
-            case .digit(let d): Text(d)
-            case .dot: Text(Locale.current.decimalSeparator ?? ".")
-            case .op(let o): Image(systemName: Self.symbol(o))
-            case .back: Image(systemName: "delete.left")
-            case .clear: Text("AC")
-            case .equals: Image(systemName: "equal")
-            case .percent: Image(systemName: "percent")
-            }
+    @ViewBuilder private var label: some View {
+        switch key {
+        case .digit(let d): Text(d)
+        case .dot: Text(Locale.current.decimalSeparator ?? ".")
+        case .op(let o): Image(systemName: Self.symbol(o)).fontWeight(.medium)
+        case .back: Image(systemName: "delete.left")
+        case .clear: Text("AC")
+        case .equals: Image(systemName: "equal").fontWeight(.semibold)
+        case .percent: Image(systemName: "percent")
         }
-        .font(.system(size: 26, weight: .medium, design: .rounded))
-        .frame(maxWidth: .infinity, minHeight: 44)
     }
 
     private static func symbol(_ o: Character) -> String {
@@ -283,10 +347,14 @@ struct KeyButton: View {
     }
 }
 
+// MARK: - Picker (add, remove, reorder)
+
 struct CurrencyPicker: View {
     let selected: [String]
     let all: [String]
     let toggle: (String) -> Void
+    let move: (IndexSet, Int) -> Void
+    let delete: (IndexSet) -> Void
     @State private var query = ""
     @Environment(\.dismiss) private var dismiss
 
@@ -299,7 +367,19 @@ struct CurrencyPicker: View {
         NavigationStack {
             List {
                 if query.isEmpty && !selected.isEmpty {
-                    Section("Selected") { ForEach(selected, id: \.self) { row($0) } }
+                    Section("Your currencies") {
+                        ForEach(selected, id: \.self) { code in
+                            HStack(spacing: 12) {
+                                FlagBadge(code: code, size: 34)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(Currency.name(code))
+                                    Text(code).font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .onMove(perform: move)
+                        .onDelete(perform: delete)
+                    }
                 }
                 Section(query.isEmpty ? "All currencies" : "Results") {
                     ForEach(filtered, id: \.self) { row($0) }
@@ -309,6 +389,7 @@ struct CurrencyPicker: View {
             .navigationTitle("Currencies")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) { EditButton() }
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
         }
@@ -324,63 +405,50 @@ struct CurrencyPicker: View {
                     Text(code).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Image(systemName: selected.contains(code) ? "checkmark.circle.fill" : "circle")
+                Image(systemName: selected.contains(code) ? "checkmark.circle.fill" : "plus.circle")
                     .font(.title3)
-                    .foregroundStyle(selected.contains(code) ? Color.accentColor : Color.secondary.opacity(0.5))
+                    .foregroundStyle(selected.contains(code) ? Color.accentColor : Color.secondary.opacity(0.6))
             }
         }
         .tint(.primary)
     }
 }
 
-/// Background styles under evaluation: "system", "graphite", "ambient".
+// MARK: - Backdrop
+
+/// "ambient" (default): the active currency's flag as a blurred light source. "system": flat.
 struct Backdrop: View {
     var activeCode: String
-    @AppStorage("bg") private var style = "graphite"
+    @AppStorage("bg") private var style = "ambient"
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
+        let dark = scheme == .dark
         ZStack {
-            switch style {
-            case "system":
-                (scheme == .dark ? Color.black : Color(white: 0.94))
-            case "ambient":
-                (scheme == .dark ? Color.black : Color(white: 0.96))
-                if let f = Currency.flag(activeCode) {
+            (dark ? Color.black : Color(white: 0.96))
+            if style != "system", let f = Currency.flag(activeCode) {
+                ZStack {
                     Text(f)
-                        .font(.system(size: 520))
+                        .font(.system(size: 640))
+                        .blur(radius: 80)
+                        .opacity(dark ? 0.85 : 0.6)
+                        .offset(y: -300)
+                    Text(f)
+                        .font(.system(size: 640))
+                        .scaleEffect(x: -1)
                         .blur(radius: 110)
-                        .saturation(1.3)
-                        .opacity(scheme == .dark ? 0.55 : 0.45)
-                        .offset(y: -220)
-                        .id(activeCode)
-                        .transition(.opacity)
+                        .opacity(dark ? 0.5 : 0.35)
+                        .offset(y: 420)
                 }
-            default: // graphite
-                (scheme == .dark ? Color(white: 0.055) : Color(red: 0.93, green: 0.925, blue: 0.915))
-                RadialGradient(colors: [Color.white.opacity(scheme == .dark ? 0.10 : 0.55), .clear],
-                               center: UnitPoint(x: 0.5, y: -0.05), startRadius: 0, endRadius: 620)
-                Grain().opacity(scheme == .dark ? 0.06 : 0.05).blendMode(.overlay)
+                .saturation(1.35)
+                .id(activeCode)
+                .transition(.opacity)
+                LinearGradient(colors: dark ? [.black.opacity(0.15), .black.opacity(0.45)]
+                                            : [.white.opacity(0.05), .white.opacity(0.35)],
+                               startPoint: .top, endPoint: .bottom)
             }
         }
-        .animation(.easeInOut(duration: 0.6), value: activeCode)
+        .animation(.easeInOut(duration: 0.7), value: activeCode)
         .ignoresSafeArea()
-    }
-}
-
-/// Static fine noise, drawn once.
-struct Grain: View {
-    var body: some View {
-        Canvas { ctx, size in
-            var rng = SystemRandomNumberGenerator()
-            for _ in 0..<Int(size.width * size.height / 9) {
-                let x = Double.random(in: 0..<size.width, using: &rng)
-                let y = Double.random(in: 0..<size.height, using: &rng)
-                let w = Double.random(in: 0...1, using: &rng)
-                ctx.fill(Path(CGRect(x: x, y: y, width: 1, height: 1)), with: .color(Color(white: w)))
-            }
-        }
-        .drawingGroup()
-        .allowsHitTesting(false)
     }
 }
