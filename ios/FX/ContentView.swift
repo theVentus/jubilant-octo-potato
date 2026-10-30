@@ -56,7 +56,7 @@ struct ContentView: View {
                                 let r = g[a]
                                 // Single glass lens that glides to the active row, behind its content.
                                 Color.clear
-                                    .glassEffect(.regular.tint(Color.accentColor.opacity(0.14)).interactive(),
+                                    .glassEffect(.regular.tint(Color.accentColor.opacity(0.05)).interactive(),
                                                  in: .rect(cornerRadius: 30))
                                     .frame(width: r.width, height: r.height)
                                     .offset(x: r.minX, y: r.minY)
