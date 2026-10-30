@@ -23,10 +23,11 @@ shot() {
   echo "shot $name"
 }
 
+for bg in system graphite ambient; do
+  for mode in light dark; do
+    xcrun simctl ui "$UDID" appearance $mode
+    shot "$bg-$mode" -bg $bg
+  done
+done
 xcrun simctl ui "$UDID" appearance light
-shot light
-shot light-expression -expr "1200+350×2"
 shot picker -showPicker YES
-xcrun simctl ui "$UDID" appearance dark
-shot dark
-shot dark-expression -expr "1200+350×2"

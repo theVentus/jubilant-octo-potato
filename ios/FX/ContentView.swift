@@ -51,7 +51,7 @@ struct ContentView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 4)
             }
-            .background { Backdrop() }
+            .background { Backdrop(activeCode: active) }
             .navigationTitle("Currency")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -333,34 +333,54 @@ struct CurrencyPicker: View {
     }
 }
 
+/// Background styles under evaluation: "system", "graphite", "ambient".
 struct Backdrop: View {
+    var activeCode: String
+    @AppStorage("bg") private var style = "graphite"
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 20)) { ctx in
-            let t = Float(ctx.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600))
-            let cx: Float = 0.5 + 0.18 * sin(t * 0.35)
-            let cy: Float = 0.45 + 0.15 * cos(t * 0.27)
-            let ly: Float = 0.5 + 0.10 * sin(t * 0.21)
-            let ry: Float = 0.5 + 0.10 * cos(t * 0.23)
-            let points: [SIMD2<Float>] = [
-                [0, 0], [0.5, 0], [1, 0],
-                [0, ly], [cx, cy], [1, ry],
-                [0, 1], [0.5, 1], [1, 1],
-            ]
-            MeshGradient(width: 3, height: 3, points: points, colors: scheme == .dark ? Self.dark : Self.light)
+        ZStack {
+            switch style {
+            case "system":
+                (scheme == .dark ? Color.black : Color(white: 0.94))
+            case "ambient":
+                (scheme == .dark ? Color.black : Color(white: 0.96))
+                if let f = Currency.flag(activeCode) {
+                    Text(f)
+                        .font(.system(size: 520))
+                        .blur(radius: 110)
+                        .saturation(1.3)
+                        .opacity(scheme == .dark ? 0.55 : 0.45)
+                        .offset(y: -220)
+                        .id(activeCode)
+                        .transition(.opacity)
+                }
+            default: // graphite
+                (scheme == .dark ? Color(white: 0.055) : Color(red: 0.93, green: 0.925, blue: 0.915))
+                RadialGradient(colors: [Color.white.opacity(scheme == .dark ? 0.10 : 0.55), .clear],
+                               center: UnitPoint(x: 0.5, y: -0.05), startRadius: 0, endRadius: 620)
+                Grain().opacity(scheme == .dark ? 0.06 : 0.05).blendMode(.overlay)
+            }
         }
+        .animation(.easeInOut(duration: 0.6), value: activeCode)
         .ignoresSafeArea()
     }
+}
 
-    private static let light: [Color] = [
-        Color(red: 1.00, green: 0.80, blue: 0.64), Color(red: 0.98, green: 0.62, blue: 0.70), Color(red: 0.70, green: 0.66, blue: 1.00),
-        Color(red: 0.55, green: 0.78, blue: 1.00), Color(red: 0.95, green: 0.90, blue: 1.00), Color(red: 0.98, green: 0.72, blue: 0.55),
-        Color(red: 0.45, green: 0.62, blue: 0.98), Color(red: 0.62, green: 0.90, blue: 0.85), Color(red: 0.80, green: 0.70, blue: 1.00),
-    ]
-    private static let dark: [Color] = [
-        Color(red: 0.05, green: 0.06, blue: 0.16), Color(red: 0.20, green: 0.08, blue: 0.35), Color(red: 0.04, green: 0.20, blue: 0.32),
-        Color(red: 0.10, green: 0.10, blue: 0.30), Color(red: 0.35, green: 0.12, blue: 0.45), Color(red: 0.02, green: 0.25, blue: 0.30),
-        Color(red: 0.03, green: 0.05, blue: 0.12), Color(red: 0.12, green: 0.06, blue: 0.28), Color(red: 0.02, green: 0.10, blue: 0.20),
-    ]
+/// Static fine noise, drawn once.
+struct Grain: View {
+    var body: some View {
+        Canvas { ctx, size in
+            var rng = SystemRandomNumberGenerator()
+            for _ in 0..<Int(size.width * size.height / 9) {
+                let x = Double.random(in: 0..<size.width, using: &rng)
+                let y = Double.random(in: 0..<size.height, using: &rng)
+                let w = Double.random(in: 0...1, using: &rng)
+                ctx.fill(Path(CGRect(x: x, y: y, width: 1, height: 1)), with: .color(Color(white: w)))
+            }
+        }
+        .drawingGroup()
+        .allowsHitTesting(false)
+    }
 }
