@@ -21,14 +21,17 @@ launch() {
   xcrun simctl launch "$UDID" "$BID" "${BASE[@]}" "$@" >/dev/null
 }
 shot() { local name=$1; shift; launch "$@"; sleep 5; xcrun simctl io "$UDID" screenshot "$OUT/$name.png" >/dev/null; echo "shot $name"; }
-# burst <name> <delays...> -- <launch args>: frame i taken after cumulative delay i
-burst() {
-  local name=$1; shift; local delays=()
-  while [ "$1" != "--" ]; do delays+=("$1"); shift; done; shift
+# record <name> <launch args>: 8s screen recording -> frames at 3 fps (morph check)
+record() {
+  local name=$1; shift
   launch "$@"
-  local i=0
-  for d in "${delays[@]}"; do sleep "$d"; xcrun simctl io "$UDID" screenshot "$OUT/$name-$i.png" >/dev/null; i=$((i+1)); done
-  echo "burst $name ($i frames)"
+  xcrun simctl io "$UDID" recordVideo --codec h264 --force "$OUT/$name.mov" &
+  local pid=$!
+  sleep 8; kill -INT $pid; wait $pid || true
+  mkdir -p "$OUT/$name"
+  ffmpeg -loglevel error -i "$OUT/$name.mov" -vf "fps=3,scale=330:-1" "$OUT/$name/%02d.png"
+  rm -f "$OUT/$name.mov"
+  echo "record $name ($(ls "$OUT/$name" | wc -l) frames)"
 }
 
 for mode in dark light; do
@@ -41,5 +44,5 @@ shot system-light -bg system
 xcrun simctl ui "$UDID" appearance dark
 shot system-dark -bg system
 shot picker -showPicker YES
-burst lens 2.5 0.8 0.8 0.8 2.5 -- -slowmo YES -demoSelect INR
-burst dock 2.5 0.8 0.8 0.8 2.5 -- -slowmo YES -demoCollapse YES
+record lens -slowmo YES -demoSelect INR
+record dock -slowmo YES -demoCollapse YES

@@ -25,7 +25,7 @@ jobs:
           xcodebuild -version | tee -a ci.log
 
       - name: Generate project
-        run: brew install xcodegen && cd ios && xcodegen generate 2>&1 | tee -a ../ci.log
+        run: brew install xcodegen ffmpeg && cd ios && xcodegen generate 2>&1 | tee -a ../ci.log
 
       - name: Pick simulator
         run: echo "UDID=$(python3 ios/scripts/pick-sim.py 2>>ci.log)" >> "$GITHUB_ENV"

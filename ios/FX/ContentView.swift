@@ -25,24 +25,35 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     StatusLine(store: store)
                         .padding(.horizontal, 24)
-                    GlassEffectContainer(spacing: 0) {
-                        LazyVStack(spacing: 4) {
-                            ForEach(list, id: \.self) { code in
-                                CurrencyRow(code: code,
-                                            isActive: code == active,
-                                            amount: amountText(code),
-                                            detail: detailText(code),
-                                            ns: glass)
-                                    .contentShape(.rect(cornerRadius: 30))
-                                    .onTapGesture { select(code) }
-                                    .contextMenu {
-                                        Button { UIPasteboard.general.string = amountText(code) } label: {
-                                            Label("Copy amount", systemImage: "doc.on.doc")
-                                        }
-                                        Button(role: .destructive) { remove(code) } label: {
-                                            Label("Remove", systemImage: "trash")
-                                        }
+                    LazyVStack(spacing: 4) {
+                        ForEach(list, id: \.self) { code in
+                            CurrencyRow(code: code,
+                                        isActive: code == active,
+                                        amount: amountText(code),
+                                        detail: detailText(code))
+                                .anchorPreference(key: RowBounds.self, value: .bounds) { [code: $0] }
+                                .contentShape(.rect(cornerRadius: 30))
+                                .onTapGesture { select(code) }
+                                .contextMenu {
+                                    Button { UIPasteboard.general.string = amountText(code) } label: {
+                                        Label("Copy amount", systemImage: "doc.on.doc")
                                     }
+                                    Button(role: .destructive) { remove(code) } label: {
+                                        Label("Remove", systemImage: "trash")
+                                    }
+                                }
+                        }
+                    }
+                    .backgroundPreferenceValue(RowBounds.self) { rows in
+                        GeometryReader { g in
+                            if let a = rows[active] {
+                                let r = g[a]
+                                // Single glass lens that glides to the active row, behind its content.
+                                Color.clear
+                                    .glassEffect(.regular.tint(Color.accentColor.opacity(0.14)).interactive(),
+                                                 in: .rect(cornerRadius: 30))
+                                    .frame(width: r.width, height: r.height)
+                                    .offset(x: r.minX, y: r.minY)
                             }
                         }
                     }
@@ -53,7 +64,7 @@ struct ContentView: View {
             .onScrollPhaseChange { _, phase in
                 if phase == .interacting && keypadOpen { withAnimation(anim) { keypadOpen = false } }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+            .safeAreaBar(edge: .bottom, spacing: 0) {
                 KeypadDock(open: $keypadOpen,
                            code: active,
                            display: amountText(active),
@@ -62,6 +73,7 @@ struct ContentView: View {
                     withAnimation(.snappy(duration: 0.18)) { calc.press(key) }
                 }
             }
+            .scrollEdgeEffectStyle(.soft, for: .bottom)
             .refreshable { await store.refresh() }
             .background { Backdrop(activeCode: active) }
             .navigationTitle("Currency")
@@ -139,6 +151,13 @@ struct ContentView: View {
 
 // MARK: - Content
 
+struct RowBounds: PreferenceKey {
+    static let defaultValue: [String: Anchor<CGRect>] = [:]
+    static func reduce(value: inout [String: Anchor<CGRect>], nextValue: () -> [String: Anchor<CGRect>]) {
+        value.merge(nextValue()) { $1 }
+    }
+}
+
 struct StatusLine: View {
     let store: RatesStore
 
@@ -168,7 +187,6 @@ struct CurrencyRow: View {
     let isActive: Bool
     let amount: String
     let detail: String?
-    let ns: Namespace.ID
 
     var body: some View {
         HStack(spacing: 14) {
@@ -204,14 +222,6 @@ struct CurrencyRow: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
-        .background {
-            if isActive {
-                // The single glass "lens" — same ID on whichever row is active, so it flows between rows.
-                Color.clear
-                    .glassEffect(.regular.tint(Color.accentColor.opacity(0.14)).interactive(), in: .rect(cornerRadius: 30))
-                    .glassEffectID("lens", in: ns)
-            }
-        }
     }
 }
 
@@ -254,7 +264,7 @@ struct KeypadDock: View {
     ]
 
     var body: some View {
-        GlassEffectContainer(spacing: 16) {
+        GlassEffectContainer(spacing: 4) {
             if open {
                 VStack(spacing: 8) {
                     Button { withAnimation(anim) { open = false } } label: {
