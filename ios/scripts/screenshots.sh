@@ -20,7 +20,7 @@ launch() {
   xcrun simctl terminate "$UDID" "$BID" 2>/dev/null || true
   xcrun simctl launch "$UDID" "$BID" "${BASE[@]}" "$@" >/dev/null
 }
-shot() { local name=$1; shift; launch "$@"; sleep 5; xcrun simctl io "$UDID" screenshot "$OUT/$name.png" >/dev/null; echo "shot $name"; }
+shot() { local name=$1; shift; launch "$@"; sleep 6; xcrun simctl io "$UDID" screenshot "$OUT/$name.png" >/dev/null; echo "shot $name"; }
 # record <name> <launch args>: 8s screen recording -> frames at 3 fps (morph check)
 record() {
   local name=$1; shift

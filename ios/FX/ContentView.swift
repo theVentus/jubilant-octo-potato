@@ -23,8 +23,14 @@ struct ContentView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
-                    StatusLine(store: store)
-                        .padding(.horizontal, 24)
+                    HStack(alignment: .bottom) {
+                        StatusLine(store: store)
+                        Spacer()
+                        GlassGlyph(code: active)
+                    }
+                    .padding(.leading, 24)
+                    .padding(.trailing, 16)
+                    .padding(.top, -40)
                     LazyVStack(spacing: 4) {
                         ForEach(list, id: \.self) { code in
                             CurrencyRow(code: code,
@@ -315,6 +321,7 @@ struct KeypadDock: View {
 }
 
 struct KeyButton: View {
+    @Environment(\.colorScheme) private var scheme
     let key: Key
     let id: String
     let ns: Namespace.ID
@@ -323,14 +330,21 @@ struct KeyButton: View {
     var body: some View {
         Button(action: action) {
             label
-                .font(.system(size: 28, weight: key.isFunction ? .medium : .regular, design: .rounded))
+                .font(.system(size: 28, weight: scheme == .dark ? .semibold : .regular, design: .rounded))
+                .shadow(color: .black.opacity(scheme == .dark ? 0.35 : 0), radius: 2)
                 .foregroundStyle(foreground)
                 .frame(maxWidth: .infinity, minHeight: 54)
                 .contentShape(.capsule)
         }
         .buttonStyle(.plain)
-        .glassEffect(key == .equals ? .regular.tint(.orange).interactive() : .regular.interactive(), in: .capsule)
+        .glassEffect(glass, in: .capsule)
         .glassEffectID(id, in: ns)
+    }
+
+    private var glass: Glass {
+        if key == .equals { return .regular.tint(.orange).interactive() }
+        // Clear glass shows the guilloche bending through each key; needs bold, bright glyphs.
+        return scheme == .dark ? .clear.interactive() : .regular.interactive()
     }
 
     private var foreground: Color {
@@ -457,6 +471,7 @@ struct Backdrop: View {
                                             : [.white.opacity(0.05), .white.opacity(0.35)],
                                startPoint: .top, endPoint: .bottom)
             }
+            Guilloche(ink: dark ? Color.white.opacity(0.22) : Color.black.opacity(0.16))
         }
         .animation(.easeInOut(duration: 0.7), value: activeCode)
         .ignoresSafeArea()
