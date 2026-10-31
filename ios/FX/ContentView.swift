@@ -32,16 +32,16 @@ struct ContentView: View {
                         GlassGlyph(code: active)
                     }
                     .padding(.leading, 24)
-                    .padding(.trailing, 16)
-                    .padding(.top, -40)
-                    LazyVStack(spacing: 4) {
+                    .padding(.trailing, 20)
+                    .padding(.top, -32)
+                    LazyVStack(spacing: 2) {
                         ForEach(list, id: \.self) { code in
                             CurrencyRow(code: code,
                                         isActive: code == active,
                                         amount: amountText(code),
                                         detail: detailText(code))
                                 .anchorPreference(key: RowBounds.self, value: .bounds) { [code: $0] }
-                                .contentShape(.rect(cornerRadius: 30))
+                                .contentShape(.rect(cornerRadius: 28))
                                 .onTapGesture { select(code) }
                                 .contextMenu {
                                     Button { UIPasteboard.general.string = amountText(code) } label: {
@@ -59,8 +59,8 @@ struct ContentView: View {
                                 let r = g[a]
                                 // Single glass lens that glides to the active row, behind its content.
                                 Color.clear
-                                    .glassEffect(.regular.tint(Color.accentColor.opacity(0.05)).interactive(),
-                                                 in: .rect(cornerRadius: 30))
+                                    .glassEffect(.regular.interactive(),
+                                                 in: .rect(cornerRadius: 28))
                                     .frame(width: r.width, height: r.height)
                                     .offset(x: r.minX, y: r.minY)
                             }
