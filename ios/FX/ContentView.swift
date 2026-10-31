@@ -11,6 +11,9 @@ struct ContentView: View {
     @State private var calc = Calc("1")
     @State private var keypadOpen = true
     @State private var showPicker = false
+    @State private var showSettings = false
+    @State private var dockHeight: CGFloat = 0
+    @Environment(\.scenePhase) private var scenePhase
     @Namespace private var glass
 
     private var list: [String] { listRaw.split(separator: ",").map(String.init).filter { !$0.isEmpty } }
@@ -67,15 +70,17 @@ struct ContentView: View {
                 }
             }
             .scrollIndicators(.hidden)
+            .keypadUnderlay(height: dockHeight)
             .onScrollPhaseChange { _, phase in
-                if phase == .interacting && keypadOpen { withAnimation(anim) { keypadOpen = false } }
+                if phase == .interacting && keypadOpen { keypadOpen = false }
             }
             .safeAreaBar(edge: .bottom, spacing: 0) {
                 KeypadDock(open: $keypadOpen,
                            code: active,
                            display: amountText(active),
                            anim: anim,
-                           ns: glass) { key in
+                           ns: glass,
+                           onHeight: { dockHeight = $0 }) { key in
                     withAnimation(.snappy(duration: 0.18)) { calc.press(key) }
                 }
             }
@@ -84,10 +89,12 @@ struct ContentView: View {
             .background { Backdrop(activeCode: active) }
             .navigationTitle("Currency")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    RefreshButton(store: store, showSettings: $showSettings)
                     Button { showPicker = true } label: { Image(systemName: "plus") }
                 }
             }
+            .sheet(isPresented: $showSettings) { LiveRatesSheet(store: store) }
             .sheet(isPresented: $showPicker) {
                 CurrencyPicker(selected: list,
                                all: store.rates.rates.keys.sorted { Currency.name($0) < Currency.name($1) },
@@ -100,16 +107,23 @@ struct ContentView: View {
             calc = Calc(exprRaw)
             let d = UserDefaults.standard
             if d.bool(forKey: "showPicker") { showPicker = true }
+            if d.bool(forKey: "showSettings") { showSettings = true }
+            if d.bool(forKey: "demoExpand") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { keypadOpen = true }
+            }
             if d.bool(forKey: "startCollapsed") { keypadOpen = false }
             if let c = d.string(forKey: "demoSelect") {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { select(c) }
             }
             if d.bool(forKey: "demoCollapse") {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { withAnimation(anim) { keypadOpen = false } }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { keypadOpen = false }
             }
         }
         .onChange(of: calc.text) { _, t in exprRaw = t }
         .task { await store.autoRefresh() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await store.autoRefresh() } }
+        }
         .sensoryFeedback(.selection, trigger: calc.text)
         .sensoryFeedback(.impact(weight: .light), trigger: active)
     }
@@ -127,7 +141,7 @@ struct ContentView: View {
 
     private func select(_ code: String) {
         guard code != active else {
-            if !keypadOpen { withAnimation(anim) { keypadOpen = true } }
+            if !keypadOpen { keypadOpen = true }
             return
         }
         let v = calc.value.flatMap { store.rates.convert($0, from: active, to: code) } ?? 0
