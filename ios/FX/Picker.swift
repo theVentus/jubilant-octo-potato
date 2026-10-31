@@ -23,11 +23,12 @@ struct CurrencyPicker: View {
                 if query.isEmpty && !selected.isEmpty {
                     Section("Your currencies") {
                         ForEach(selected, id: \.self) { code in
-                            HStack(spacing: 12) {
-                                FlagBadge(code: code, size: 34)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(Currency.name(code))
-                                    Text(code).font(.caption).foregroundStyle(.secondary)
+                            PickerRowLabel(code: code) {
+                                let sym = Currency.symbol(code)
+                                if !sym.isEmpty {
+                                    Text(sym)
+                                        .font(.system(.body, design: .rounded, weight: .medium))
+                                        .foregroundStyle(.tertiary)
                                 }
                             }
                         }
@@ -51,20 +52,41 @@ struct CurrencyPicker: View {
     }
 
     private func row(_ code: String) -> some View {
-        Button { toggle(code) } label: {
-            HStack(spacing: 12) {
-                FlagBadge(code: code, size: 34)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(Currency.name(code))
-                    Text(code).font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Image(systemName: selected.contains(code) ? "checkmark.circle.fill" : "plus.circle")
+        let on = selected.contains(code)
+        return Button { toggle(code) } label: {
+            PickerRowLabel(code: code) {
+                Image(systemName: on ? "checkmark.circle.fill" : "plus.circle")
                     .font(.title3)
-                    .foregroundStyle(selected.contains(code) ? Color.accentColor : Color.secondary.opacity(0.6))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(on ? Color.accentColor : Color.secondary)
+                    .contentTransition(.symbolEffect(.replace))
             }
+            .contentShape(.rect)
         }
         .tint(.primary)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
 
+/// Shared row layout for the picker: badge, name over code, trailing accessory.
+private struct PickerRowLabel<Accessory: View>: View {
+    let code: String
+    @ViewBuilder let accessory: () -> Accessory
+
+    var body: some View {
+        HStack(spacing: 14) {
+            FlagBadge(code: code, size: 34)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(Currency.name(code))
+                    .font(.body)
+                    .lineLimit(1)
+                Text(code)
+                    .font(.system(.footnote, design: .rounded, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            accessory()
+        }
+        .padding(.vertical, 3)
+    }
+}

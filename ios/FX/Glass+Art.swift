@@ -38,6 +38,8 @@ struct GlyphShape: Shape {
 }
 
 /// Active currency's symbol rendered as a solid piece of clear glass.
+/// Single-character symbols ($, €, ₹) are fitted to a fixed optical height; multi-letter
+/// fallbacks (CHF, "Fr") get a wider, lighter box so they don't read heavier than a symbol.
 struct GlassGlyph: View {
     let code: String
 
@@ -46,12 +48,27 @@ struct GlassGlyph: View {
         return (s.isEmpty || s.count > 2) ? String(code.prefix(3)) : s
     }
 
+    private var box: CGSize {
+        switch glyph.count {
+        case 1: CGSize(width: 104, height: 96)
+        case 2: CGSize(width: 132, height: 76)
+        default: CGSize(width: 150, height: 58)
+        }
+    }
+
     var body: some View {
-        Color.clear
-            .frame(width: 150, height: 118)
-            .glassEffect(.clear.interactive(), in: GlyphShape(text: glyph))
-            .id(code)
-            .transition(.scale(scale: 0.6).combined(with: .opacity))
-            .accessibilityHidden(true)
+        let multi = glyph.count > 1
+        ZStack(alignment: .bottomTrailing) {
+            Color.clear
+                .frame(width: box.width, height: box.height)
+                .glassEffect(.clear.interactive(),
+                             in: GlyphShape(text: glyph, weight: multi ? .bold : .heavy))
+                .id(code)
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.72, anchor: .bottom).combined(with: .opacity),
+                    removal: .scale(scale: 1.12, anchor: .bottom).combined(with: .opacity)))
+        }
+        .frame(width: 150, height: 96, alignment: .bottomTrailing)
+        .accessibilityHidden(true)
     }
 }
