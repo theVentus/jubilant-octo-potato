@@ -23,12 +23,16 @@ struct CurrencyRow: View {
                 Text(code)
                     .font(.system(.headline, design: .rounded, weight: .semibold))
                     .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .fixedSize()
                 Text(Currency.name(code))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
+            // Never squeeze the code; long expressions shrink the amount instead.
+            .frame(minWidth: 72, alignment: .leading)
             .layoutPriority(0)
 
             Spacer(minLength: 12)

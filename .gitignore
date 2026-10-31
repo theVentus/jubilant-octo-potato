@@ -7,3 +7,5 @@ ios/Payload/
 ios/FX.ipa
 shots/
 .claude/worktrees/
+
+ios/altstore.json

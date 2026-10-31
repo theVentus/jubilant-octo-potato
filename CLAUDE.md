@@ -6,7 +6,8 @@ SwiftUI, iOS 26 only (uses `glassEffect`, `GlassEffectContainer`, `safeAreaBar`)
 ## Files
 - `ios/FX/ContentView.swift` — UI. Rule: content sits on the backdrop; glass only for the control layer (selection lens behind active row, floating keypad dock, toolbar).
 - `ios/FX/Calc.swift` — calculator input/evaluation (× ÷ before + −) and number formatting.
-- `ios/FX/Rates.swift` — rates model + offline loading: newest of on-device cache and bundled `rates.json`; online refresh from raw.githubusercontent `rates.json`, fallback open.er-api.com.
+- `ios/FX/Rates.swift` — rates model, sources and refresh. Offline: newest of on-device cache and bundled `rates.json`. Online: CurrencyBeacon (hourly, only if the user saved a free key — stored in Keychain, never in the repo) → Currency API (fawazahmed0, jsDelivr then pages.dev, daily, keyless) → open.er-api.com (daily; UI must show "Rates By Exchange Rate API" when used). Manual refresh capped at 30/day (`RefreshBudget`); auto-refresh at most hourly.
+- UI files: `ContentView.swift` (screen + integration), `Keypad.swift` (dock, motion choreography, `keypadUnderlay` fade), `Rows.swift` (rows, flag badges, FlagArt palette), `Backdrop.swift` (ambient colour fields), `Status.swift` (status line, RefreshButton, LiveRatesSheet), `Picker.swift`, `Glass+Art.swift`.
 - `ios/FXTests/` — unit tests (conversion, precedence, input rules, decoding, bundled rates).
 - `rates.json` — written daily by `.github/workflows/rates.yml`; bundled into the app at build time. Never hand-edit.
 - Root `index.html`/`sw.js` etc. — the earlier PWA, superseded; still served by Pages.
@@ -14,7 +15,7 @@ SwiftUI, iOS 26 only (uses `glassEffect`, `GlassEffectContainer`, `safeAreaBar`)
 ## CI (`.github/workflows/ios.yml`, on push to `ios/**`)
 Unit tests → simulator screenshots + morph videos (`ios/scripts/screenshots.sh`) pushed to branch `ci-shots` → unsigned `FX.ipa` uploaded to release `latest`. Failures are re-emitted as annotations because raw Actions logs aren't reachable from the dev sandbox; `ios/scripts/wait-ci.sh` waits for a run and prints steps + annotations.
 
-Launch args for fixed states: `-list INR,USD -active USD -expr 250 -bg system|ambient -startCollapsed YES -showPicker YES -demoSelect INR -demoCollapse YES -slowmo YES`.
+Launch args for fixed states: `-list INR,USD -active USD -expr 250 -bg system|ambient -startCollapsed YES -showPicker YES -demoSelect INR -demoCollapse YES -demoExpand YES -showSettings YES -slowmo YES`.
 
 ## Install
-Unsigned IPA → Sideloadly on Windows with a free Apple ID; re-sign every 7 days. Bundle id `com.theventus.fx`.
+Unsigned IPA, signed on install with a free Apple ID (7-day signatures). Bundle id `com.theventus.fx`. Each CI build is versioned 1.0.<run_number> and publishes `altstore.json` (AltStore Classic source) beside `FX.ipa` on release `latest`: https://github.com/theVentus/jubilant-octo-potato/releases/download/latest/altstore.json. AltStore + AltServer (Windows) give background re-signing and in-app updates; Sideloadly is the fallback.

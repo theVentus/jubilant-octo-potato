@@ -263,7 +263,7 @@ private struct KeypadUnderlay: ViewModifier {
     /// Bottom safe-area inset of the scroll view: the safeAreaBar (keypad) plus the home indicator.
     @State private var barInset: CGFloat = 0
 
-    private static let fade: CGFloat = 70
+    private static let fade: CGFloat = 48
 
     func body(content: Content) -> some View {
         content
