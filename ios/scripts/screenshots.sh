@@ -44,5 +44,7 @@ shot system-light -bg system
 xcrun simctl ui "$UDID" appearance dark
 shot system-dark -bg system
 shot picker -showPicker YES
+shot settings -showSettings YES
 record lens -slowmo YES -demoSelect INR
 record dock -slowmo YES -demoCollapse YES
+record expand -slowmo YES -startCollapsed YES -demoExpand YES
