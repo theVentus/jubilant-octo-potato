@@ -34,6 +34,7 @@ jobs:
         run: cd ios && xcodebuild test -project FX.xcodeproj -scheme FX -destination "id=$UDID" -quiet 2>&1 | tee -a ../ci.log
 
       - name: Screenshots
+        timeout-minutes: 12
         run: bash ios/scripts/screenshots.sh 2>&1 | tee -a ci.log
 
       - name: Publish screenshots to ci-shots branch
