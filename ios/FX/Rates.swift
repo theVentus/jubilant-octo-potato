@@ -112,29 +112,34 @@ enum RatesLoader {
 
     static func save(_ r: Rates) { try? r.encoded().write(to: cacheURL, options: .atomic) }
 
-    enum Outcome { case ok(Rates), keyRejected, quotaExceeded, offline }
+    enum KeyIssue { case rejected, quota }
+    enum Outcome { case ok(Rates, keyIssue: KeyIssue?), keyRejected, quotaExceeded, offline }
 
     /// Live source first when a key is set, then the keyless chain.
     static func fetch(key: String?) async -> Outcome {
-        var keyProblem: Outcome?
+        var issue: KeyIssue?
         if let key, !key.isEmpty {
             var req = request(RateSource.beacon)
             req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
             if let (data, status) = try? await send(req) {
-                if status == 200, let r = RateSource.parseBeacon(data) { return .ok(r) }
-                if status == 401 || status == 403 { keyProblem = .keyRejected }
-                if status == 429 { keyProblem = .quotaExceeded }
+                if status == 200, let r = RateSource.parseBeacon(data) { return .ok(r, keyIssue: nil) }
+                if status == 401 || status == 403 { issue = .rejected }
+                if status == 429 { issue = .quota }
             }
         }
         for url in RateSource.fawaz {
             if let (data, status) = try? await send(request(url)), status == 200, let r = RateSource.parseFawaz(data) {
-                return keyProblem.map { _ in .ok(r) } ?? .ok(r)
+                return .ok(r, keyIssue: issue)
             }
         }
         if let (data, status) = try? await send(request(RateSource.erAPI)), status == 200, let r = RateSource.parseERAPI(data) {
-            return .ok(r)
+            return .ok(r, keyIssue: issue)
         }
-        return keyProblem ?? .offline
+        switch issue {
+        case .rejected: return .keyRejected
+        case .quota: return .quotaExceeded
+        case nil: return .offline
+        }
     }
 
     private static func request(_ url: URL) -> URLRequest {
@@ -246,12 +251,17 @@ final class RatesStore {
         lastChecked = Date()
         UserDefaults.standard.set(lastChecked, forKey: "lastChecked")
         switch outcome {
-        case .ok(let r):
+        case .ok(let r, let issue):
             if (r.updated ?? .distantPast) >= (rates.updated ?? .distantPast) || r.source == "CurrencyBeacon" {
                 rates = r
                 RatesLoader.save(r)
             }
-            status = .idle
+            // Fallback rates loaded, but tell the user why they aren't live.
+            switch issue {
+            case .rejected: status = .keyRejected
+            case .quota: status = .quotaExceeded
+            case nil: status = .idle
+            }
         case .keyRejected: status = .keyRejected
         case .quotaExceeded: status = .quotaExceeded
         case .offline: status = .offline
